@@ -47,11 +47,11 @@ public class AgentManager {
 	 * Confirm if the agent corresponding to an InetAddress
 	 * is being tracked.
 	 *
-	 * @param WirelessAgentInetAddress
+	 * @param agentAddress
 	 * @return true if the agent is being tracked
 	 */
-	protected boolean isTracked(final InetAddress WirelessAgentInetAddress) {
-		return agentMap.containsKey(WirelessAgentInetAddress);
+	protected boolean isTracked(final InetAddress agentAddress) {
+		return agentMap.containsKey(agentAddress);
 	}
 	
 	/**
@@ -87,45 +87,44 @@ public class AgentManager {
      * Handle a ping from an agent. If an agent was added to the
      * agent map, return true.
      *
-     * @param WirelessAgentAddr
+     * @param agentAddr
      * @return true if an agent was added
      */
-	protected boolean receivePing(final InetAddress WirelessAgentAddr) {
+	protected boolean receivePing(final InetAddress agentAddr) {
 
     	/*
     	 * If this is not the first time we're hearing from this
     	 * agent, then skip.
     	 */
-    	if (WirelessAgentAddr == null || isTracked (WirelessAgentAddr)) {
+    	if (agentAddr == null || isTracked (agentAddr)) {
     		return false;
     	}
 
     	IOFSwitch ofSwitch = null;
 
-    	
 		/*
 		 * If the OFSwitch corresponding to the agent has already
 		 * registered here, then set it in the WirelessAgent object.
 		 * We avoid registering the agent until its corresponding
 		 * OFSwitch has done so.
 		 */
-		for (IOFSwitch sw: switchService.getAllSwitchMap().values()) {
+		/*for (IOFSwitch sw: switchService.getAllSwitchMap().values()) {
 			
-			/*
+			
 			 * We're binding by IP addresses now, because we want to pool
 			 * an OFSwitch with its corresponding WirelessAgent, if any.
-			 */
+			 
 			String switchInetAddr = sw.getInetAddress().toString();
 			String switchIpAddr = switchInetAddr.substring(1, switchInetAddr.indexOf(':'));
 			
-			if (switchIpAddr.equals(WirelessAgentAddr.getHostAddress())) {
+			if (switchIpAddr.equals(agentAddr.getHostAddress())) {
 				ofSwitch = sw;
 				break;
 			}
 		}
 
 		if (ofSwitch == null)
-			return false;
+			return false;*/
 
 		synchronized (this) {
 
@@ -133,21 +132,21 @@ public class AgentManager {
 			 * outside this critical region for
 			 * too long
 			 */
-			if (isTracked(WirelessAgentAddr))
+			if (isTracked(agentAddr))
 				return false;
-
+			
 			IApAgent agent = AgentFactory.getApAgent();
-			agent.setSwitch(ofSwitch);
-			agent.init(WirelessAgentAddr);
+		//	agent.setSwitch(ofSwitch);
+			agent.init(agentAddr);
 			agent.setLastHeard(System.currentTimeMillis());
-			List<String> poolListForAgent = poolManager.getPoolsForAgent(WirelessAgentAddr);
+			List<String> poolListForAgent = poolManager.getPoolsForAgent(agentAddr);
 
     		/*
     		 * It is possible that the controller is recovering from a failure,
     		 * so query the agent to see what LVAPs it hosts, and add them
     		 * to our client tracker accordingly.
     		 */
-    		for (WirelessClient client: agent.getLvapsRemote()) {
+    		/*for (WirelessClient client: agent.getLvapsRemote()) {
 
     			WirelessClient trackedClient = 
     					clientManager.getClients().get(client.getMacAddress());
@@ -156,18 +155,18 @@ public class AgentManager {
     				clientManager.addClient(client);
     				trackedClient = clientManager.getClients().get(client.getMacAddress());
 
-    				/*
+    				
     				 * We need to find the pool the client was previously assigned to.
     				 * The only information we have at this point is the
     				 * SSID list of the client's LVAP. This can be simplified in
     				 * future by adding a "pool" field to the LVAP struct.
-    				 */
+    				 
 
     				for (String pool: poolListForAgent) {
-    					/*
+    					
     					 * Every SSID in every pool is unique, so we need to use only one
     					 * of the lvap's SSIDs to find the right pool.
-    					 */
+    					 
     					String ssid = client.getLvap().getSsids().get(0);
     					if (poolManager.getSsidListForPool(pool).contains(ssid)) {
     						poolManager.mapClientToPool(trackedClient, pool);
@@ -180,8 +179,8 @@ public class AgentManager {
     			if (trackedClient.getLvap().getAgent() == null) {
     				trackedClient.getLvap().setAgent(agent);
     			}
-    			else if (!trackedClient.getLvap().getAgent().getIpAddress().equals(WirelessAgentAddr)) {
-        			/*
+    			else if (!trackedClient.getLvap().getAgent().getIpAddress().equals(agentAddr)) {
+        			
         			 * Race condition:
         			 * - client associated at AP1 before the master failure,
         			 * - master crashes.
@@ -189,14 +188,14 @@ public class AgentManager {
         			 * - client scans, master assigns it to AP2.
         			 * - AP1 now joins the master again, but it has the client's LVAP as well.
         			 * - Master should now clear the LVAP from AP1.
-        			 */
+        			 
     				agent.removeClientLvap(client);
     			}
-    		}
+    		}*/
 
-   			agentMap.put(WirelessAgentAddr, agent);
+   			agentMap.put(agentAddr, agent);
 
-    		log.info("Adding WirelessAgent to map: " + WirelessAgentAddr.getHostAddress());
+    		log.info("Adding WirelessAgent to map: " + agentAddr.getHostAddress());
 
     		/* This TimerTask checks the lastHeard value
     		 * of the agent in order to handle failure detection

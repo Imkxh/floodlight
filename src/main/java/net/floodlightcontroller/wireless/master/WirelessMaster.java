@@ -1,5 +1,8 @@
 package net.floodlightcontroller.wireless.master;
 
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -33,7 +36,7 @@ import net.floodlightcontroller.core.module.IFloodlightModule;
 import net.floodlightcontroller.core.module.IFloodlightService;
 import net.floodlightcontroller.threadpool.IThreadPoolService;
 
-public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IMasterApplication{
+public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 
 	protected static Logger log = LoggerFactory.getLogger(WirelessMaster.class);
 	
@@ -48,6 +51,9 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IM
 	private final PoolManager poolManager; 
 	
 	private int clientAssocTimeout = 60; // Seconds
+	
+	static private final String DEFAULT_POOL_FILE = "Poolfile"; 
+	static private final int DEFAULT_PORT = 2819;
 	
 	public WirelessMaster(){
 		clientManager = new ClientManager();
@@ -72,7 +78,6 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IM
 	 */
 	protected void receivePing(final InetAddress agentAddr) {
 		if (agentManager.receivePing(agentAddr)) {
-						
 		}
 		else {
 			updateAgentLastHeard (agentAddr);
@@ -86,7 +91,7 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IM
 	 * @param agentAddr InetAddress of agent
 	 * @param clientHwAddress MAC address of client that performed probe scan
 	 */
-	protected void receiveProbe(final InetAddress agentAddr, final MacAddress clientHwAddress, String ssid) {
+	protected synchronized void receiveProbe(final InetAddress agentAddr, final MacAddress clientHwAddress, String ssid) {
 		if (agentAddr == null 
 			|| clientHwAddress == null 
 			|| clientHwAddress.isBroadcast()
@@ -181,7 +186,7 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IM
 	 * @param clientHwAddress
 	 * @param staInfo
 	 */
-	protected void receiveAssociatedInfo(final InetAddress agentAddr, 
+	protected void receiveAssoc(final InetAddress agentAddr, 
 			final MacAddress clientHwAddress, String staInfo) {
 		if (agentAddr == null || clientHwAddress == null 
 				|| staInfo == null || staInfo.equals("")) {
@@ -200,7 +205,32 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IM
 		}
 		
 		client.setAssociated(true);
-		client.setStaInfo(staInfo);
+		client.getLvap().setStaInfo(staInfo);
+	}
+	
+	protected void receiveDisassoc(final InetAddress agentAddr, 
+			final MacAddress clientHwAddress, final String reason) {
+		
+		IApAgent agent = agentManager.getAgent(agentAddr);
+		if (agent == null)
+			return;
+	
+		WirelessClient client = clientManager.getClient(clientHwAddress);
+		if (client == null)
+			return;
+		
+		if (client.getLvap().getAgent() != agent) {
+			log.info("wireless client " + clientHwAddress + 
+					" is not associated with agent " + agentAddr);
+			return;
+		}
+		
+		log.info("Clearing Lvap " + clientHwAddress +
+				" from agent:" + agentAddr + " due to " + reason);
+		poolManager.removeClientPoolMapping(client);
+		agent.removeClientLvap(client);
+		clientManager.removeClient(client.getMacAddress());
+	
 	}
 	
 	/**
@@ -296,69 +326,6 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IM
 		}
 	}
 	
-	//********* applications methods (from IMasterToApplicationInterface) **********//
-	
-	@Override
-	public void handoffClientToAp(String pool, MacAddress staHwAddr, InetAddress newApIpAddr) {
-		handoffClientToApInternal(pool, staHwAddr, newApIpAddr);
-	}
-
-	@Override
-	public void setClientLocation(MacAddress staHwAddr, String location) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	public void switchClientChannel(MacAddress clientHwAddr, InetAddress newApIpAddr, String switchMode,
-			String newChannel, String switchCount) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	public Set<WirelessClient> getClients(String pool) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public WirelessClient getClientFromHwAddress(String pool, MacAddress clientHwAddress) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public Map<MacAddress, Map<String, String>> getRxStatsFromAgent(String pool, InetAddress agentAddr) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public Set<InetAddress> getAgentAddrs(String pool) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public boolean addNetwork(String pool, String ssid) {
-		// TODO Auto-generated method stub
-		return false;
-	}
-
-	@Override
-	public boolean removeNetwork(String pool, String ssid) {
-		// TODO Auto-generated method stub
-		return false;
-	}
-
-	@Override
-	public void executeApplicationTask(Runnable r) {
-		// TODO Auto-generated method stub
-		
-	}
-	
-	
 	//******************** IFloodlightModule methods ********************//
 	
 	@Override
@@ -388,12 +355,126 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IM
 		switchService = context.getServiceImpl(IOFSwitchService.class);
 		IThreadPoolService tp = context.getServiceImpl(IThreadPoolService.class);
 		executor = tp.getScheduledExecutor();
+		
+		try {
+			readPoolFile(context);
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		} catch (InstantiationException e) {
+			e.printStackTrace();
+		} catch (IllegalAccessException e) {
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+	}
+	
+	private void readPoolFile(FloodlightModuleContext context) 
+			throws UnknownHostException, InstantiationException, 
+			IllegalAccessException, ClassNotFoundException, IOException {
+		
+		// read config options
+        Map<String, String> configOptions = context.getConfigParams(this);
+        
+        // List of trusted agents
+        String agentAuthListFile = DEFAULT_POOL_FILE;
+        String agentAuthListFileConfig = configOptions.get("PoolFile");
+        
+        if (agentAuthListFileConfig != null) {
+        	agentAuthListFile = agentAuthListFileConfig; 
+        }
+           
+		BufferedReader br = new BufferedReader (new FileReader(agentAuthListFile));
+		
+		String strLine;
+		
+		/* Each line has the following format:
+		 * 
+		 * IPAddr-of-agent  pool1 pool2 pool3 ...
+		 */
+		while ((strLine = br.readLine()) != null) {
+			if (strLine.startsWith("#")) // comment
+				continue;
+			
+			if (strLine.length() == 0) // blank line
+				continue;
+			
+			// NAME
+			String [] fields = strLine.split(" "); 
+			if (!fields[0].equals("NAME")) {
+				log.error("Missing NAME field " + fields[0]);
+				log.error("Offending line: " + strLine);
+				System.exit(1);
+			}
+			
+			if (fields.length != 2) {
+				log.error("A NAME field should specify a single string as a pool name");
+				log.error("Offending line: " + strLine);
+				System.exit(1);
+			}
+
+			String poolName = fields[1];
+			System.out.println("pool:"+poolName);				
+			// NODES
+			strLine = br.readLine();
+			
+			if (strLine == null) {
+				log.error("Unexpected EOF after NAME field for pool: " + poolName);
+				System.exit(1);
+			}
+			
+			fields = strLine.split(" ");
+			
+			if (!fields[0].equals("NODES")){
+				log.error("A NAME field should be followed by a NODES field");
+				log.error("Offending line: " + strLine);
+				System.exit(1);
+			}
+			
+			if(fields.length == 1) {				
+				log.error("A pool must have at least one node defined for it");
+				log.error("Offending line: " + strLine);
+				System.exit(1);
+			}
+			
+			for (int i = 1; i < fields.length; i++) {
+				poolManager.addPoolForAgent(InetAddress.getByName(fields[i]), poolName);
+				System.out.println(fields[i]);
+			}
+			
+			// NETWORKS
+			strLine = br.readLine();
+			
+			if (strLine == null) {
+				log.error("Unexpected EOF after NODES field for pool: " + poolName);
+				System.exit(1);
+			}
+
+			fields = strLine.split(" ");
+			
+			if (!fields[0].equals("NETWORKS")) {
+				log.error("A NODES field should be followed by a NETWORKS field");
+				log.error("Offending line: " + strLine);
+				System.exit(1);
+			}
+			
+			for (int i = 1; i < fields.length; i++) {
+				poolManager.addNetworkForPool(poolName, fields[i]);
+				System.out.println(fields[i]);					
+			}
+		}
+		
+		br.close();
 	}
 
 	@Override
 	public void startUp(FloodlightModuleContext context) throws FloodlightModuleException {
 		floodlightProvider.addOFMessageListener(OFType.PACKET_IN, this);
-        executor.execute(new AgentMsgServer(this, 2819, executor));
+        executor.execute(new AgentMsgServer(this, DEFAULT_PORT, executor));
+        agentManager.setSwitchService(switchService);
 	}
 
 	//******************** IOFMessageListener methods ********************//
@@ -419,11 +500,6 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener, IM
 	public Command receive(IOFSwitch sw, OFMessage msg, FloodlightContext cntx) {
 		return Command.CONTINUE;
 	}
-	
-	
-	
-	
-	
 	
 	private class ClientAssocTimeOutTask implements Runnable {
 		private final WirelessClient oc;

@@ -20,7 +20,7 @@ public class AgentMsgServer implements Runnable{
 	private final String WIRELESS_MSG_PING = "ping";
 	private final String WIRELESS_MSG_PROBE = "probe";
 	private final String WIRELESS_MSG_AUTH = "auth";
-	private final String WIRELESS_MSG_ASSOC = "assoc";
+	private final String WIRELESS_MSG_ASSOC = "station";
 	private final String WIRELESS_MSG_DISASSOC = "disassoc";
 	private final String WIRELESS_MSG_DEAUTH = "deauth";
 	private final String WIRELESS_MSG_PUBLISH = "publish";
@@ -47,7 +47,6 @@ public class AgentMsgServer implements Runnable{
 		}
 
 		while (true) {
-
 			try {
 				final byte[] receiveData = new byte[1024]; 
 				final DatagramPacket receivedPacket = new DatagramPacket(receiveData, receiveData.length);
@@ -63,12 +62,23 @@ public class AgentMsgServer implements Runnable{
 
 	/** Protocol handlers **/
 
-	private void receivePing(final InetAddress odinAgentAddr) {
-		wirelessMaster.receivePing(odinAgentAddr);
+	private void receivePing(final InetAddress agentAddr) {
+		wirelessMaster.receivePing(agentAddr);
 	}
 
-	private void receiveProbe(final InetAddress odinAgentAddr, final MacAddress clientHwAddress, final String ssid) {
-		wirelessMaster.receiveProbe(odinAgentAddr, clientHwAddress, ssid);
+	private void receiveProbe(final InetAddress agentAddr, 
+			final MacAddress clientHwAddress, final String ssid) {
+		wirelessMaster.receiveProbe(agentAddr, clientHwAddress, ssid);
+	}
+	
+	private void receiveAssoc(final InetAddress agentAddr, 
+			final MacAddress clientHwAddress, final String staInfo) {
+		wirelessMaster.receiveAssoc(agentAddr, clientHwAddress, staInfo);
+	}
+	
+	private void receiveDisassoc(final InetAddress agentAddr, 
+			final MacAddress clientHwAddress, final String reason) {
+		wirelessMaster.receiveDisassoc(agentAddr, clientHwAddress, reason);
 	}
 
 	private class AgentMsgHandler implements Runnable {
@@ -81,31 +91,46 @@ public class AgentMsgServer implements Runnable{
 		// Agent message handler
 		public void run() {
 			final String msg = new String(receivedPacket.getData()).trim().toLowerCase();
-		
-			final String[] fields = msg.split(" ");
+			final InetAddress agentAddr = receivedPacket.getAddress();
+			
+			if (msg.equals(WIRELESS_MSG_PING)) {
+				receivePing(agentAddr);
+				return;
+			}
+			
+			/**
+			 * message format:
+			 * -----------------------------------------
+			 * | type | client mac | payload		   |
+			 * -----------------------------------------
+			 */
+			final String[] fields = msg.split(" ", 3);
 			final String msg_type = fields[0];
-			final InetAddress odinAgentAddr = receivedPacket.getAddress();
+			final String staAddress = fields[1];
+			
 			
 			switch (msg_type) {
-			case WIRELESS_MSG_PING:
-				receivePing(odinAgentAddr);
-				break;
 			case WIRELESS_MSG_PROBE:
-				// 2nd part of message should contain
-				// the STA's MAC address
-				final String staAddress = fields[1];
 				String ssid = "";
-
 				if (fields.length > 2) {
 					// SSID is specified in the scan
-					ssid = msg.substring(WIRELESS_MSG_PROBE.length() + staAddress.length() + 2);
+					ssid = fields[2];
 				}
-
-				receiveProbe(odinAgentAddr, MacAddress.of(staAddress), ssid);
+				receiveProbe(agentAddr, MacAddress.of(staAddress), ssid);
 				break;
-			case WIRELESS_MSG_PUBLISH:
+			case WIRELESS_MSG_ASSOC:
+				if (fields.length > 2) {
+					String staInfo = fields[2];
+					receiveAssoc(agentAddr, MacAddress.of(staAddress), staInfo);
+				}
 				break;
-			case WIRELESS_MSG_STATION:
+			case WIRELESS_MSG_DISASSOC:
+			case WIRELESS_MSG_DEAUTH:
+				String reason = null;
+				if (fields.length > 2) {
+					reason = fields[2];
+				}
+				receiveDisassoc(agentAddr, MacAddress.of(staAddress), reason);
 				break;
 			}
 		}

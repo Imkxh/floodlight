@@ -10,6 +10,7 @@ public class Lvap {
 	
 	private final MacAddress lvapBssid;
 	private final List<String> lvapSsids;
+	private String staInfo;
 	private IApAgent WirelessAgent;
 	private List<OFMessage> msgList = new ArrayList<OFMessage>();
 
@@ -44,4 +45,11 @@ public class Lvap {
 		this.msgList = msglist;
 	}
 	
+	public String getStaInfo() {
+		return staInfo;
+	}
+
+	public void setStaInfo(String staInfo) {
+		this.staInfo = staInfo;
+	}
 }

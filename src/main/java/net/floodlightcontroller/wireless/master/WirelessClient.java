@@ -9,7 +9,6 @@ public class WirelessClient{
 	private InetAddress ipAddress;
 	private Lvap lvap;
 	private boolean associated;
-	private String staInfo;
 	
 	public WirelessClient(MacAddress hwAddress, InetAddress ipAddress, Lvap lvap) {
 		super();
@@ -44,14 +43,6 @@ public class WirelessClient{
 
 	public void setAssociated(boolean associated) {
 		this.associated = associated;
-	}
-
-	public String getStaInfo() {
-		return staInfo;
-	}
-
-	public void setStaInfo(String staInfo) {
-		this.staInfo = staInfo;
 	}
 
 	@Override
