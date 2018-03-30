@@ -10,8 +10,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -35,8 +38,11 @@ import net.floodlightcontroller.core.module.FloodlightModuleException;
 import net.floodlightcontroller.core.module.IFloodlightModule;
 import net.floodlightcontroller.core.module.IFloodlightService;
 import net.floodlightcontroller.threadpool.IThreadPoolService;
+import net.floodlightcontroller.wireless.master.WirelessEventSubscription.EventType;
+import net.floodlightcontroller.wireless.master.WirelessEventSubscription.SubType;
 
-public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
+public class WirelessMaster implements IFloodlightModule, 
+					IOFMessageListener, IApplicationInterface{
 
 	protected static Logger log = LoggerFactory.getLogger(WirelessMaster.class);
 	
@@ -48,8 +54,11 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 	private final AgentManager agentManager;
 	private final ClientManager clientManager;	
 	private final LvapManager lvapManager;
-	private final PoolManager poolManager; 
+	private final PoolManager poolManager;
 	
+	private final ConcurrentMap<WirelessEventSubscription, NotificationCallback> 
+						subscriptions = new ConcurrentHashMap<>();
+
 	private int clientAssocTimeout = 60; // Seconds
 	
 	static private final String DEFAULT_POOL_FILE = "Poolfile"; 
@@ -156,7 +165,7 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 				 */
 				if (lvap.getAgent() == null) {
 					IApAgent agent = agentManager.getAgent(agentAddr);
-					
+		
 					// Push flow messages associated with the client
 					/*try {
 						newAgent.getSwitch().write(lvap.getOFMessageList(), null);
@@ -169,7 +178,7 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 					executor.schedule(new ClientAssocTimeOutTask(wc), 
 							clientAssocTimeout, TimeUnit.SECONDS);
 					
-					log.info ("Client: " + wc.getMacAddress() + " connecting for first time. "
+					log.info("Client: " + wc.getMacAddress() + " connecting for first time. "
 							+ "Assigning to: " + agent.getIpAddress());
 				}
 
@@ -231,6 +240,27 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 		agent.removeClientLvap(client);
 		clientManager.removeClient(client.getMacAddress());
 	
+	}
+	
+	/**
+	 * Handle message about Controller subscribed information sent by ap agent
+	 * @param agentAddr agent address
+	 * @param clientHwAddress client address
+	 * @param eventType subscription event type
+	 * @param params subscription event params
+	 */
+	protected void receivePublish(final InetAddress agentAddr, 
+			final MacAddress clientHwAddress, final String eventType, final String params) {
+		
+		String msg = agentAddr.toString() + " " + clientHwAddress.toString() + " " + params;
+		
+		for (WirelessEventSubscription wes : subscriptions.keySet()) {
+			if (wes.getEventType().toString().equals(eventType)) {
+				NotificationCallback cb = subscriptions.get(wes);
+				assert(cb != null);
+				cb.handle(wes.getEventType(), msg);
+			}
+		}
 	}
 	
 	/**
@@ -326,6 +356,86 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 		}
 	}
 	
+	//** Methods provided for the applications(from IApplicationInterface) **//
+
+	
+	@Override
+	public void handoffClientToAp(String pool, MacAddress staHwAddr, 
+			InetAddress newApIpAddr) {
+		handoffClientToApInternal(pool, staHwAddr, newApIpAddr);
+	}
+
+	@Override
+	public Set<WirelessClient> getClients(String pool) {
+		return poolManager.getClientsFromPool(pool);
+	}
+
+	@Override
+	public WirelessClient getClientFromHwAddress(String pool, MacAddress clientHwAddress) {
+		WirelessClient client = clientManager.getClient(clientHwAddress);
+		return (client != null && poolManager.getPoolForClient(client).equals(pool)) ? client : null;
+
+	}
+
+	@Override
+	public Set<InetAddress> getAgentAddrs(String pool) {
+		return poolManager.getAgentAddrsForPool(pool);
+	}
+
+	@Override
+	public void registerSubscription(String pool, WirelessEventSubscription wes, 
+			NotificationCallback cb) {
+		// FIXME: Need to calculate subscriptions per pool
+		assert (wes != null);
+		assert (cb != null);
+
+		subscriptions.put(wes, cb);
+		
+		if (wes.getSubType() == SubType.APAGENT) {
+			if (wes.getExtra() != null && !wes.getExtra().equals("")) {
+				String sub = wes.getEventType() + " " + wes.getExtra();
+				executor.execute(new AgentPushSubscriptionRunnable(pool, sub));
+			}
+		}
+	}
+
+	@Override
+	public void unregisterSubscription(String pool, String receiver, EventType eventType) {
+		assert(receiver != null);
+		assert(eventType != null);
+		assert(!receiver.equals(""));
+		
+		for (WirelessEventSubscription wes : subscriptions.keySet()) {
+			if (wes.getReceiver().equals(receiver) && 
+					wes.getEventType() == eventType) {
+				subscriptions.remove(wes);
+			}
+		}
+	}
+	
+	/**
+	 * Send subscription message to all subscribers
+	 * @param event subscription event type
+	 * @param msg subscription message
+	 */
+	private void subscriptionNotify(WirelessEventSubscription.EventType event, String msg) {
+		assert (event != null);
+		
+		for (Entry<WirelessEventSubscription, NotificationCallback> entry : 
+			subscriptions.entrySet()) {
+			if (entry.getKey().getEventType().equals(event)) {
+				entry.getValue().handle(event, msg);
+			}
+		}
+	}
+	
+	@Override
+	public void executeApplicationTask(Runnable r) {
+		assert (r != null);
+		executor.execute(r);
+	}
+	
+	
 	//******************** IFloodlightModule methods ********************//
 	
 	@Override
@@ -386,8 +496,11 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
         if (agentAuthListFileConfig != null) {
         	agentAuthListFile = agentAuthListFileConfig; 
         }
-           
-		BufferedReader br = new BufferedReader (new FileReader(agentAuthListFile));
+        
+        List<WirelessApplication> applicationList = 
+        		new ArrayList<WirelessApplication>();
+		BufferedReader br = new BufferedReader(
+				new FileReader(agentAuthListFile));
 		
 		String strLine;
 		
@@ -465,9 +578,41 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 				poolManager.addNetworkForPool(poolName, fields[i]);
 				System.out.println(fields[i]);					
 			}
+			
+			// APPLICATIONS
+			strLine = br.readLine();
+			
+			if (strLine == null) {
+				log.error("Unexpected EOF after NETWORKS field for pool: " + poolName);
+				System.exit(1);
+			}
+
+			fields = strLine.split(" ");
+			
+			if (!fields[0].equals("APPLICATIONS")) {
+				log.error("A NETWORKS field should be followed by an APPLICATIONS field");
+				log.error("Offending line: " + strLine);
+				System.exit(1);
+			}
+			
+			for (int i = 1; i < fields.length; i++) {
+				WirelessApplication appInstance = (WirelessApplication) Class.forName(fields[i]).newInstance();
+				appInstance.setWirelessInterface(this);
+				appInstance.setPool(poolName);
+				applicationList.add(appInstance);
+			}
 		}
 		
 		br.close();
+		
+		// Spawn applications
+        for (WirelessApplication app: applicationList) {
+        	if (app == null) {
+				System.out.println("nullllllllllllllllllllll");
+
+        	}
+        	executor.execute(app);
+        }
 	}
 
 	@Override
@@ -500,6 +645,8 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 	public Command receive(IOFSwitch sw, OFMessage msg, FloodlightContext cntx) {
 		return Command.CONTINUE;
 	}
+	
+	
 	
 	private class ClientAssocTimeOutTask implements Runnable {
 		private final WirelessClient oc;
@@ -583,4 +730,29 @@ public class WirelessMaster implements IFloodlightModule, IOFMessageListener{
 		}
 		
 	}
+	
+	private class AgentPushSubscriptionRunnable implements Runnable {
+		
+		private final String subscription;
+		private final String pool;
+		
+		AgentPushSubscriptionRunnable(String pool, String subscription) {
+			this.pool = pool;
+			this.subscription = subscription;
+		}
+		@Override
+		public void run() {
+			/**
+			 * Should probably have threads to do this
+			 */
+			for (InetAddress agentAddr : poolManager.getAgentAddrsForPool(pool)) {
+				IApAgent agent = agentManager.getAgent(agentAddr);
+				if (agent != null) {
+					agent.setSubscriptions(subscription);
+				}
+			}
+		}
+		
+	}
+
 }

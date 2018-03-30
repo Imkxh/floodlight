@@ -26,6 +26,7 @@ public class AgentMsgServer implements Runnable{
 	private final String WIRELESS_MSG_PUBLISH = "publish";
 	
 	private final int ODIN_SERVER_PORT;
+	private final int MSG_FORMAT_SECTIONS = 3;
 
 	private DatagramSocket controllerSocket;
 	private final ExecutorService executor;
@@ -80,6 +81,11 @@ public class AgentMsgServer implements Runnable{
 			final MacAddress clientHwAddress, final String reason) {
 		wirelessMaster.receiveDisassoc(agentAddr, clientHwAddress, reason);
 	}
+	
+	private void receivePublish(final InetAddress agentAddr, 
+			final MacAddress clientHwAddress, final String eventType, final String params) {
+		wirelessMaster.receivePublish(agentAddr, clientHwAddress, eventType, params);
+	}
 
 	private class AgentMsgHandler implements Runnable {
 		final DatagramPacket receivedPacket;
@@ -104,7 +110,7 @@ public class AgentMsgServer implements Runnable{
 			 * | type | client mac | payload		   |
 			 * -----------------------------------------
 			 */
-			final String[] fields = msg.split(" ", 3);
+			final String[] fields = msg.split(" ", MSG_FORMAT_SECTIONS);
 			final String msg_type = fields[0];
 			final String staAddress = fields[1];
 			
@@ -131,6 +137,17 @@ public class AgentMsgServer implements Runnable{
 					reason = fields[2];
 				}
 				receiveDisassoc(agentAddr, MacAddress.of(staAddress), reason);
+				break;
+			case WIRELESS_MSG_PUBLISH:
+				if (fields.length < 3) {
+					return;
+				}
+				String payload = fields[2];
+				String[] subFields = payload.split(" ", 2);
+				if (subFields.length == 2) {
+					receivePublish(agentAddr, MacAddress.of(staAddress), 
+							subFields[0], subFields[1]);
+				}
 				break;
 			}
 		}
