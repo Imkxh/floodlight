@@ -4,6 +4,11 @@ import java.net.InetAddress;
 
 import org.projectfloodlight.openflow.types.MacAddress;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+
+import net.floodlightcontroller.wireless.web.ClientSerializer;
+
+@JsonSerialize(using=ClientSerializer.class)
 public class WirelessClient{
 	private final MacAddress hwAddress;
 	private InetAddress ipAddress;

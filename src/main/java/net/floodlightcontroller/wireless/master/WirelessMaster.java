@@ -8,6 +8,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -37,17 +38,20 @@ import net.floodlightcontroller.core.module.FloodlightModuleContext;
 import net.floodlightcontroller.core.module.FloodlightModuleException;
 import net.floodlightcontroller.core.module.IFloodlightModule;
 import net.floodlightcontroller.core.module.IFloodlightService;
+import net.floodlightcontroller.restserver.IRestApiService;
 import net.floodlightcontroller.threadpool.IThreadPoolService;
 import net.floodlightcontroller.wireless.master.WirelessEventSubscription.EventType;
 import net.floodlightcontroller.wireless.master.WirelessEventSubscription.SubType;
+import net.floodlightcontroller.wireless.web.WirelessWebRoutable;
 
 public class WirelessMaster implements IFloodlightModule, 
-					IOFMessageListener, IApplicationInterface{
+					IOFMessageListener, IApplicationInterface, IFloodlightService{
 
 	protected static Logger log = LoggerFactory.getLogger(WirelessMaster.class);
 	
 	protected IFloodlightProviderService floodlightProvider;
 	protected IOFSwitchService switchService;
+	protected IRestApiService restApi;
 	
 	private ScheduledExecutorService executor;
 	
@@ -148,7 +152,7 @@ public class WirelessMaster implements IFloodlightModule,
 					List<String> ssidList = new ArrayList<String> ();
 					ssidList.addAll(poolManager.getSsidListForPool(pool));
 						
-					Lvap lvap = new Lvap (poolManager.generateBssidForClient(clientHwAddress), ssidList);
+					Lvap lvap = new Lvap(poolManager.generateBssidForClient(clientHwAddress), ssidList);
 					try {
 						wc = new WirelessClient(clientHwAddress, InetAddress.getByName("0.0.0.0"), lvap);
 					} catch (UnknownHostException e) {
@@ -449,8 +453,11 @@ public class WirelessMaster implements IFloodlightModule,
 
 	@Override
 	public Map<Class<? extends IFloodlightService>, IFloodlightService> getServiceImpls() {
-		// TODO Auto-generated method stub
-		return null;
+		Map<Class<? extends IFloodlightService>, IFloodlightService> m = 
+				new HashMap<Class<? extends IFloodlightService>,
+        IFloodlightService>();
+        m.put(WirelessMaster.class, this);
+        return m;
 	}
 
 	@Override
@@ -459,6 +466,7 @@ public class WirelessMaster implements IFloodlightModule,
 		        new ArrayList<Class<? extends IFloodlightService>>();
 		l.add(IFloodlightProviderService.class);
 		l.add(IOFSwitchService.class);
+		l.add(IRestApiService.class);
 		return l;
 	}
 
@@ -466,6 +474,7 @@ public class WirelessMaster implements IFloodlightModule,
 	public void init(FloodlightModuleContext context) throws FloodlightModuleException {
 		floodlightProvider = context.getServiceImpl(IFloodlightProviderService.class);
 		switchService = context.getServiceImpl(IOFSwitchService.class);
+		restApi = context.getServiceImpl(IRestApiService.class);
 		IThreadPoolService tp = context.getServiceImpl(IThreadPoolService.class);
 		executor = tp.getScheduledExecutor();
 		
@@ -623,6 +632,7 @@ public class WirelessMaster implements IFloodlightModule,
 		floodlightProvider.addOFMessageListener(OFType.PACKET_IN, this);
         executor.execute(new AgentMsgServer(this, DEFAULT_PORT, executor));
         agentManager.setSwitchService(switchService);
+        restApi.addRestletRoutable(new WirelessWebRoutable());
 	}
 
 	//******************** IOFMessageListener methods ********************//
