@@ -1,5 +1,6 @@
 package net.floodlightcontroller.wireless.master;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Map;
 import java.util.Set;
@@ -71,9 +72,6 @@ public interface IApAgent {
 	 */
 	public void setSwitch (IOFSwitch sw);
 	
-	public void updateRssiFilterExpress(String express);
-	
-	
 	/**
 	 * Remove an LVAP from the AP corresponding to this agent
 	 * 
@@ -143,15 +141,4 @@ public interface IApAgent {
 	 */
 	public void setSubscriptions (String subscriptionList);
 	
-	/**
-	 * Get station's RX aggregation infomation from ap's system kernel. 
-	 * 
-	 * @return a list of WirelessClient entities on the agent
-	 */
-	public String getStaAggregationRx(WirelessClient client);
-	
-	/**
-	 * Set station's RX aggregation infomation to ap's system kernel. 
-	 */
-	public void setStaAggregationRx(WirelessClient client, String agg_rx);
 }

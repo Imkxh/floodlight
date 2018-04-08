@@ -9,6 +9,7 @@ public class WirelessEventSubscription {
 	
 	public enum EventType {
 		MOBILITY_SIGNAL,
+		STA_STATUS,
 		NEW_CLIENT;
 	};
 	

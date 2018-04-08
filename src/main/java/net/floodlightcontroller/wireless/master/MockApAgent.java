@@ -11,10 +11,22 @@ import net.floodlightcontroller.core.IOFSwitch;
 
 public class MockApAgent implements IApAgent{
 
+	// WirelessAgent Handler strings
+	private static final String WRITE_HANDLER_ADD_VAP = "add_vap";
+	private static final String WRITE_HANDLER_SET_VAP = "set_vap";
+	private static final String WRITE_HANDLER_REMOVE_VAP = "remove_vap";
+	private static final String WRITE_HANDLER_SEND_PROBE_RESPONSE = "send_probe_response";
+	private static final String WRITE_HANDLER_SUBSCRIPTIONS = "subscriptions";
+	private static final String WRITE_HANDLER_CHANNEL_SWITCH = "channel_switch";
+	private static final String READ_HANDLER_LVAP_TABLE = "lvap_table";
+	private static final String READ_HANDLER_CLIENT_STATS = "client_stats";
+	private static final String READ_HANDLER_DEVICE_INFO = "device_info";
+		
 	private IOFSwitch sw = null;
 	private InetAddress ipAddr = null;
 	private long lastHeard;
-	private ConcurrentSkipListSet<WirelessClient> clientList = new ConcurrentSkipListSet<WirelessClient>();
+	private ConcurrentSkipListSet<WirelessClient> clientList = 
+			new ConcurrentSkipListSet<WirelessClient>();
 	
 	@Override
 	public InetAddress getIpAddress() {
@@ -54,12 +66,6 @@ public class MockApAgent implements IApAgent{
 	}
 
 	@Override
-	public void updateRssiFilterExpress(String express) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
 	public void removeClientLvap(WirelessClient oc) {
 		clientList.remove(oc);
 	}
@@ -80,11 +86,6 @@ public class MockApAgent implements IApAgent{
 	public void addClientStation(WirelessClient oc) {
 		// TODO Auto-generated method stub
 		
-	}
-
-	@Override
-	public void updateClientLvap(WirelessClient oc) {
-		clientList.add(oc);
 	}
 
 	@Override
@@ -110,13 +111,7 @@ public class MockApAgent implements IApAgent{
 	}
 
 	@Override
-	public String getStaAggregationRx(WirelessClient client) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public void setStaAggregationRx(WirelessClient client, String agg_rx) {
+	public void updateClientLvap(WirelessClient oc) {
 		// TODO Auto-generated method stub
 		
 	}

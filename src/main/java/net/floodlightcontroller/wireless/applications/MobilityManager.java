@@ -44,23 +44,13 @@ public class MobilityManager extends WirelessApplication{
 	 * Register subscriptions
 	 */
 	private void init () {
-		
-		WirelessEventSubscription signal_sub = new WirelessEventSubscription(
-				MobilityManager.class.getName(), SubType.APAGENT, EventType.MOBILITY_SIGNAL);		
-		NotificationCallback signal_cb = new NotificationCallback() {
-
-			@Override
-			public void handle(EventType type, String msg) {
-				processSignal(msg);
-			}
-
-		};
-		registerSubscription(signal_sub, signal_cb);
-		
+		// Create a subscription that notifies a new client added 
 		WirelessEventSubscription client_sub = new WirelessEventSubscription(
 				MobilityManager.class.getName(), SubType.APPLICATION, EventType.NEW_CLIENT); 
+		 
 		NotificationCallback client_cb = new NotificationCallback() {
 
+			// This will be called when a new client was added
 			@Override
 			public void handle(EventType type, String msg) {
 				updateSignalSubscription(msg);
@@ -87,6 +77,7 @@ public class MobilityManager extends WirelessApplication{
 	 */
 	private synchronized void processSignal(String msg) {
 		
+		System.out.println("---------------" + msg);
 		String[] fields = msg.split(" ");
 		if (fields.length != 3) {
 			log.info("mobility signal processing: the number of parameters is wrong");
@@ -94,8 +85,9 @@ public class MobilityManager extends WirelessApplication{
 		}
 		
 		InetAddress agentAddr;
+		System.out.println("---------------" + fields[0]);
 		try {
-			agentAddr = InetAddress.getByAddress(fields[0].getBytes());
+			agentAddr = InetAddress.getByName(fields[0]);
 		} catch (UnknownHostException e) {
 			e.printStackTrace();
 			return;
@@ -165,10 +157,13 @@ public class MobilityManager extends WirelessApplication{
 		unregisterSubscription(MobilityManager.class.getName(), EventType.MOBILITY_SIGNAL);
 		
 		Set<WirelessClient> clients = getClients();
-		String clientList = "";
+		String clientList = "ether src";
 		for (WirelessClient wc : clients) {
 			clientList += " " + wc.getMacAddress();
 		}
+		
+		// Create a signal subscription that obtains the signal strength of 
+		// specified terminal from the ap agent
 		WirelessEventSubscription signal_sub = new WirelessEventSubscription(
 				MobilityManager.class.getName(), SubType.APAGENT, EventType.MOBILITY_SIGNAL);
 		signal_sub.setExtra(clientList);

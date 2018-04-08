@@ -20,7 +20,7 @@ public class AgentMsgServer implements Runnable{
 	private final String WIRELESS_MSG_PING = "ping";
 	private final String WIRELESS_MSG_PROBE = "probe";
 	private final String WIRELESS_MSG_AUTH = "auth";
-	private final String WIRELESS_MSG_ASSOC = "station";
+	private final String WIRELESS_MSG_ASSOC = "assoc";
 	private final String WIRELESS_MSG_DISASSOC = "disassoc";
 	private final String WIRELESS_MSG_DEAUTH = "deauth";
 	private final String WIRELESS_MSG_PUBLISH = "publish";
@@ -98,6 +98,9 @@ public class AgentMsgServer implements Runnable{
 		public void run() {
 			final String msg = new String(receivedPacket.getData()).trim().toLowerCase();
 			final InetAddress agentAddr = receivedPacket.getAddress();
+			
+			//88888 test
+			System.out.println("************" + msg);
 			
 			if (msg.equals(WIRELESS_MSG_PING)) {
 				receivePing(agentAddr);

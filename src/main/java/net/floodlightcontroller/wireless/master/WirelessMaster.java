@@ -52,7 +52,7 @@ public class WirelessMaster implements IFloodlightModule,
 	private ScheduledExecutorService executor;
 	
 	private final AgentManager agentManager;
-	private final ClientManager clientManager;	
+	private final ClientManager clientManager;
 	private final LvapManager lvapManager;
 	private final PoolManager poolManager;
 	
@@ -215,6 +215,7 @@ public class WirelessMaster implements IFloodlightModule,
 		
 		client.setAssociated(true);
 		client.getLvap().setStaInfo(staInfo);
+		subscriptionNotify(EventType.NEW_CLIENT, clientHwAddress.toString());
 	}
 	
 	protected void receiveDisassoc(final InetAddress agentAddr, 
@@ -252,10 +253,11 @@ public class WirelessMaster implements IFloodlightModule,
 	protected void receivePublish(final InetAddress agentAddr, 
 			final MacAddress clientHwAddress, final String eventType, final String params) {
 		
-		String msg = agentAddr.toString() + " " + clientHwAddress.toString() + " " + params;
+		String msg = agentAddr.getHostAddress() + " " + clientHwAddress.toString() + " " + params;
 		
 		for (WirelessEventSubscription wes : subscriptions.keySet()) {
-			if (wes.getEventType().toString().equals(eventType)) {
+			if (wes.getEventType().toString().toLowerCase().equals(
+					eventType.toLowerCase())) {
 				NotificationCallback cb = subscriptions.get(wes);
 				assert(cb != null);
 				cb.handle(wes.getEventType(), msg);
@@ -393,7 +395,8 @@ public class WirelessMaster implements IFloodlightModule,
 		
 		if (wes.getSubType() == SubType.APAGENT) {
 			if (wes.getExtra() != null && !wes.getExtra().equals("")) {
-				String sub = wes.getEventType() + " " + wes.getExtra();
+				String sub = wes.getEventType().toString().toLowerCase()
+						+ " " + wes.getExtra();
 				executor.execute(new AgentPushSubscriptionRunnable(pool, sub));
 			}
 		}

@@ -1,5 +1,5 @@
 # Pool-1
 NAME pool-1
-NODES 172.24.4.50 172.24.4.51
-NETWORKS new-master
-APPLICATIONS net.floodlightcontroller.wireless.applications.MobilityManager
+NODES 192.168.103.32
+NETWORKS sdwn-wifi-test
+APPLICATIONS net.floodlightcontroller.wireless.applications.MobilityManager net.floodlightcontroller.wireless.applications.ClientStatusManager

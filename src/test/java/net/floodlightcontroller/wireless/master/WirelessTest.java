@@ -8,6 +8,7 @@ import static org.easymock.EasyMock.reset;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -395,6 +396,42 @@ public class WirelessTest extends FloodlightTestCase{
     	wirelessMaster.receiveProbe(InetAddress.getByName(ipAddress3), clientMacAddr1, "odin");
     	assertEquals(clientManager.getClients().size(), 0);
     	assertEquals(poolManager.getClientsFromPool(PoolManager.GLOBAL_POOL).size(), 0);
+    }
+    
+    @Test
+    public void testFunctionInvokeReadHandler() {
+    	String handlerName = "lvap_table";
+    	String handler = "wiagent lvap_table jhg 58:7f:66:da:81:7c "
+    			+ "172.24.4.50 00:1b:bc:da:81:7c sdwn-wifi\n38:d5:47:b4:a5:3b "
+    			+ "172.24.4.221 00:1b:bc:b4:a5:3b sdwn-wifi";
+    	char[] handlerCharArray = handler.toCharArray();
+
+		int blankNum = 0;
+		char[] headbuf = new char[64];
+		int i = 0;
+		while(true) {
+			char c = handlerCharArray[i++];
+			if (c == ' ') {
+				blankNum++;
+				if (blankNum == 3) break;
+			}
+			headbuf[i] = c;
+			if (i ==64) {
+				System.out.println("out range!");
+			}
+		}
+		String[] head = new String(headbuf).trim().split(" ");
+		if (!head[1].equals(handlerName))
+			System.out.println("error");
+		int dataLength = Integer.parseInt(head[2]);
+		char[] databuf = new char[dataLength];
+		for (int j = 0; j < dataLength; j++) {
+			char c = handlerCharArray[i++];
+			databuf[j] = c;
+		}
+		String data = new String(databuf);
+		System.out.println(data);
+	
     }
     
     /**

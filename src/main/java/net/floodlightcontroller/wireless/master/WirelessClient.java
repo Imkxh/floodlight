@@ -9,6 +9,7 @@ public class WirelessClient{
 	private InetAddress ipAddress;
 	private Lvap lvap;
 	private boolean associated;
+	private ClientStatus status;
 	
 	public WirelessClient(MacAddress hwAddress, InetAddress ipAddress, Lvap lvap) {
 		super();
@@ -43,6 +44,14 @@ public class WirelessClient{
 
 	public void setAssociated(boolean associated) {
 		this.associated = associated;
+	}
+
+	public ClientStatus getStatus() {
+		return status;
+	}
+
+	public void setStatus(ClientStatus status) {
+		this.status = status;
 	}
 
 	@Override
